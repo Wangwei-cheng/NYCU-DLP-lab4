@@ -1,0 +1,56 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv
+venv/
+ENV/
+
+# --- Jupyter Notebook ---
+.ipynb_checkpoints
+
+# --- Dataset & Weights (Deep Learning) ---
+# 忽略大型資料集與權重檔
+dataset/
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.weights
+*.pkl
+*.npy
+*.npz
+
+# --- Logs & Visualization ---
+logs/
+runs/
+*.log
+.tensorboard/
+
+# --- IDEs & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Project Specific ---
+*.pdf
+!spec.pdf
