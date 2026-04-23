@@ -1,0 +1,1 @@
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints --fast_train

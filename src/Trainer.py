@@ -155,12 +155,60 @@ class VAE_Model(nn.Module):
             self.tqdm_bar('val', pbar, loss.detach().cpu(), lr=self.scheduler.get_last_lr()[0])
     
     def training_one_step(self, img, label, adapt_TeacherForcing):
-        # TODO
-        raise NotImplementedError
+        self.optim.zero_grad()
+        img = img.permute(1, 0, 2, 3, 4) # [K, B, C, H, W]
+        label = label.permute(1, 0, 2, 3, 4) # [K, B, C, H, W]
+        
+        mse_loss = 0
+        kl_loss = 0
+        last_frame = img[0]
+
+        for t in range(1, self.train_vi_len):
+            # Posterior Predictor
+            curr_frame = img[t]
+            x_prev = self.frame_transformation(last_frame)
+            x_in = self.frame_transformation(curr_frame)
+            p_in = self.label_transformation(label[t])
+            z, mu, logvar = self.Gaussian_Predictor(x_in, p_in)
+            
+            fusion = self.Decoder_Fusion(x_prev, p_in, z)
+            pred_frame = self.Generator(fusion)
+            
+            mse_loss += self.mse_criterion(pred_frame, curr_frame)
+            kl_loss += kl_criterion(mu, logvar, self.batch_size)
+
+            if adapt_TeacherForcing:
+                last_frame = curr_frame
+            else:
+                x_prev = pred_frame.detach()
+            
+        beta = self.kl_annealing.get_beta()
+        loss = (mse_loss + beta * kl_loss) / (self.train_vi_len - 1)
+        loss.backward()
+        self.optimizer_step()
+        
+        return loss
     
     def val_one_step(self, img, label):
-        # TODO
-        raise NotImplementedError
+        img = img.permute(1, 0, 2, 3, 4) # [K, B, C, H, W]
+        label = label.permute(1, 0, 2, 3, 4) # [K, B, C, H, W]
+        
+        mse_loss = 0
+        last_frame = img[0]
+
+        for t in range(1, self.val_vi_len):
+            # Sample z from prior
+            z = torch.randn(1, self.args.N_dim, self.args.frame_H, self.args.frame_W).to(self.args.device)
+            
+            x_prev = self.frame_transformation(last_frame)
+            p_in = self.label_transformation(label[t])
+            
+            decoder_input = self.Decoder_Fusion(x_prev, p_in, z)
+            last_frame = self.Generator(decoder_input)
+            
+            mse_loss += self.mse_criterion(last_frame, img[t])
+            
+        return mse_loss / (self.val_vi_len - 1)
                 
     def make_gif(self, images_list, img_name):
         new_list = []
@@ -202,8 +250,9 @@ class VAE_Model(nn.Module):
         return val_loader
     
     def teacher_forcing_ratio_update(self):
-        # TODO
-        raise NotImplementedError
+        if self.current_epoch >= self.tfr_sde:
+            self.tfr -= self.tfr_d_step
+        self.tfr = max(self.tfr, 0.0)
             
     def tqdm_bar(self, mode, pbar, loss, lr):
         pbar.set_description(f"({mode}) Epoch {self.current_epoch}, lr:{lr}" , refresh=False)
