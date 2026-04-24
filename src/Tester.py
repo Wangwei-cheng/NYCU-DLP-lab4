@@ -44,7 +44,7 @@ class Dataset_Dance(torchData):
         self.img_folder = []
         self.label_folder = []
         
-        data_num = len(glob('./Demo_Test/*'))
+        data_num = len(glob(os.path.join(root, 'test/test_img/*')))
         for i in range(data_num):
             self.img_folder.append(sorted(glob(os.path.join(root , f'test/test_img/{i}/*')), key=get_key))
             self.label_folder.append(sorted(glob(os.path.join(root , f'test/test_label/{i}/*')), key=get_key))
@@ -120,11 +120,21 @@ class Test_model(VAE_Model):
         # label_list is used to store the label seq
         # Both list will be used to make gif
         decoded_frame_list = [img[0].cpu()]
-        label_list = []
+        label_list = [label[0].cpu()]
 
-        # TODO
-        raise NotImplementedError
+        last_frame = img[0].to(self.args.device) 
+        for t in range(1, 630):
+            label_t = label[t].to(self.args.device)
+            x_in = self.frame_transformation(last_frame)
+            p_in = self.label_transformation(label_t)
+            z = torch.randn(1, self.args.N_dim, self.args.frame_H, self.args.frame_W).to(self.args.device)
+
+            fusion = self.Decoder_Fusion(x_in, p_in, z)
+            pred_frame = self.Generator(fusion)  
             
+            decoded_frame_list.append(pred_frame.cpu())
+            label_list.append(label_t.cpu())
+            last_frame = pred_frame
         
         # Please do not modify this part, it is used for visulization
         generated_frame = stack(decoded_frame_list).permute(1, 0, 2, 3, 4)

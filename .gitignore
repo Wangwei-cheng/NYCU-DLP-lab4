@@ -39,6 +39,11 @@ dataset/
 *.npy
 *.npz
 
+# --- Test Results ---
+results/
+*.gif
+*.csv
+
 # --- Logs & Visualization ---
 logs/
 runs/
@@ -54,3 +59,4 @@ Thumbs.db
 # --- Project Specific ---
 *.pdf
 !spec.pdf
+train_log.txt

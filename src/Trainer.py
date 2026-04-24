@@ -114,7 +114,17 @@ class VAE_Model(nn.Module):
         self.train_vi_len = args.train_vi_len
         self.val_vi_len   = args.val_vi_len
         self.batch_size = args.batch_size
-        
+
+        self.best_val_loss = float('inf')
+        self.log_save_path = os.path.join(
+            args.log_save_root, 
+            f"lr_{args.lr} \
+            _tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step} \
+            _kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio} \
+            _optim_{args.optim}.txt"
+            )
+        from torch.utils.tensorboard import SummaryWriter
+        self.writer = SummaryWriter(log_dir=args.log_save_root)
         
     def forward(self, img, label):
         pass
@@ -123,22 +133,39 @@ class VAE_Model(nn.Module):
         for i in range(self.args.num_epoch):
             train_loader = self.train_dataloader()
             adapt_TeacherForcing = True if random.random() < self.tfr else False
+            train_loss_sum = 0.0
             
             for (img, label) in (pbar := tqdm(train_loader, ncols=120)):
                 img = img.to(self.args.device)
                 label = label.to(self.args.device)
                 loss = self.training_one_step(img, label, adapt_TeacherForcing)
-                
+                train_loss_sum += loss.item()
                 beta = self.kl_annealing.get_beta()
+
                 if adapt_TeacherForcing:
                     self.tqdm_bar('train [TeacherForcing: ON, {:.1f}], beta: {}'.format(self.tfr, beta), pbar, loss.detach().cpu(), lr=self.scheduler.get_last_lr()[0])
                 else:
                     self.tqdm_bar('train [TeacherForcing: OFF, {:.1f}], beta: {}'.format(self.tfr, beta), pbar, loss.detach().cpu(), lr=self.scheduler.get_last_lr()[0])
-            
-            if self.current_epoch % self.args.per_save == 0:
-                self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}.ckpt"))
                 
-            self.eval()
+            train_loss = train_loss_sum / len(train_loader)
+            val_loss, all_psnr = self.eval()
+            psnr_avg = np.mean(np.concatenate(all_psnr))
+            print(f"[Epoch {self.current_epoch}] PSNR: {psnr_avg:.4f}, train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}")
+
+            self.writer.add_scalar('PSNR', psnr_avg, self.current_epoch)
+            self.writer.add_scalar('Train/Loss', train_loss, self.current_epoch)
+            self.writer.add_scalar('Val/Loss', val_loss, self.current_epoch)
+            self.writer.add_scalar('Learning_Rate', self.scheduler.get_last_lr()[0], self.current_epoch)
+            self.writer.add_scalar('KL_Beta', self.kl_annealing.get_beta(), self.current_epoch)
+            self.writer.add_scalar('Teacher_Forcing', self.tfr, self.current_epoch)
+
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}_BEST.ckpt"))
+                print(f"Best model updated at epoch {self.current_epoch} with val_loss {val_loss:.4f}")
+            elif self.current_epoch % self.args.per_save == 0:
+                self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}.ckpt"))
+
             self.current_epoch += 1
             self.scheduler.step()
             self.teacher_forcing_ratio_update()
@@ -148,11 +175,21 @@ class VAE_Model(nn.Module):
     @torch.no_grad()
     def eval(self):
         val_loader = self.val_dataloader()
+        loss_sum = 0.0
+        count = 0
+        all_psnr = []
         for (img, label) in (pbar := tqdm(val_loader, ncols=120)):
             img = img.to(self.args.device)
             label = label.to(self.args.device)
-            loss = self.val_one_step(img, label)
+            loss, psnr_frames = self.val_one_step(img, label)
             self.tqdm_bar('val', pbar, loss.detach().cpu(), lr=self.scheduler.get_last_lr()[0])
+            all_psnr.append(psnr_frames)
+            loss_sum += loss.item()
+            count += 1
+        
+        avg_loss = loss_sum / count
+
+        return avg_loss, all_psnr
     
     def training_one_step(self, img, label, adapt_TeacherForcing):
         self.optim.zero_grad()
@@ -180,7 +217,7 @@ class VAE_Model(nn.Module):
             if adapt_TeacherForcing:
                 last_frame = curr_frame
             else:
-                x_prev = pred_frame.detach()
+                last_frame = pred_frame.detach()
             
         beta = self.kl_annealing.get_beta()
         loss = (mse_loss + beta * kl_loss) / (self.train_vi_len - 1)
@@ -195,20 +232,23 @@ class VAE_Model(nn.Module):
         
         mse_loss = 0
         last_frame = img[0]
+        psnr_frames = []
 
         for t in range(1, self.val_vi_len):
-            # Sample z from prior
+            gt_frame = img[t]
             z = torch.randn(1, self.args.N_dim, self.args.frame_H, self.args.frame_W).to(self.args.device)
             
             x_prev = self.frame_transformation(last_frame)
             p_in = self.label_transformation(label[t])
             
             decoder_input = self.Decoder_Fusion(x_prev, p_in, z)
-            last_frame = self.Generator(decoder_input)
+            pred_frame = self.Generator(decoder_input)
             
-            mse_loss += self.mse_criterion(last_frame, img[t])
+            mse_loss += self.mse_criterion(pred_frame, gt_frame)
+            psnr_frames.append(Generate_PSNR(pred_frame, gt_frame).item())
+            last_frame = pred_frame
             
-        return mse_loss / (self.val_vi_len - 1)
+        return mse_loss / (self.val_vi_len - 1), psnr_frames
                 
     def make_gif(self, images_list, img_name):
         new_list = []
@@ -296,6 +336,7 @@ def main(args):
         model.eval()
     else:
         model.training_stage()
+        model.writer.close()
 
 
 
@@ -342,6 +383,9 @@ if __name__ == '__main__':
     parser.add_argument('--kl_anneal_type',     type=str, default='Cyclical',       help="")
     parser.add_argument('--kl_anneal_cycle',    type=int, default=10,               help="")
     parser.add_argument('--kl_anneal_ratio',    type=float, default=1,              help="")
+
+    # Log save root
+    parser.add_argument('--log_save_root',     type=str, default="./logs", help="The path to save your log file")
     
 
     
