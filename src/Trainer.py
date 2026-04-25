@@ -1,3 +1,4 @@
+import math
 import os
 import argparse
 import numpy as np
@@ -100,8 +101,40 @@ class VAE_Model(nn.Module):
         # Generative model
         self.Generator            = Generator(input_nc=args.D_out_dim, output_nc=3)
         
-        self.optim      = optim.Adam(self.parameters(), lr=self.args.lr)
-        self.scheduler  = optim.lr_scheduler.MultiStepLR(self.optim, milestones=[2, 5], gamma=0.1)
+        if args.optim == "Adam":
+            self.optim = optim.Adam(self.parameters(), lr=self.args.lr)
+        elif args.optim == "AdamW":
+            self.optim = optim.AdamW(self.parameters(), lr=self.args.lr, weight_decay=1e-4)
+        
+        if args.fast_train:
+            self.scheduler  = optim.lr_scheduler.MultiStepLR(
+                self.optim, 
+                milestones=[2, 5], 
+                gamma=0.1
+                )
+        elif args.scheduler == "MultiStepLR":
+            self.scheduler  = optim.lr_scheduler.MultiStepLR(
+                self.optim, 
+                milestones=[int(self.args.num_epoch*0.3), int(self.args.num_epoch*0.6)], 
+                gamma=0.1
+                )
+        elif args.scheduler == "CosineAnnealingWarmRestarts":
+            self.scheduler  = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                self.optim, 
+                T_0=int(self.args.num_epoch/6),
+                eta_min=1e-5
+                )
+        elif args.scheduler == "ReduceLROnPlateau":
+            self.scheduler  = optim.lr_scheduler.ReduceLROnPlateau(
+                self.optim, 
+                mode='min', 
+                factor=0.65, 
+                patience=10, 
+                verbose=True
+                )
+        else:
+            raise NotImplementedError(f"Scheduler {args.scheduler} is not implemented")
+
         self.kl_annealing = kl_annealing(args, current_epoch=0)
         self.mse_criterion = nn.MSELoss()
         self.current_epoch = 0
@@ -118,13 +151,12 @@ class VAE_Model(nn.Module):
         self.best_val_loss = float('inf')
         self.log_save_path = os.path.join(
             args.log_save_root, 
-            f"lr_{args.lr} \
-            _tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step} \
-            _kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio} \
-            _optim_{args.optim}.txt"
+            f"lr_{args.lr}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}\
+            _kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}\
+            _optim_{args.optim}"
             )
         from torch.utils.tensorboard import SummaryWriter
-        self.writer = SummaryWriter(log_dir=args.log_save_root)
+        self.writer = SummaryWriter(log_dir=self.log_save_path)
         
     def forward(self, img, label):
         pass
@@ -159,6 +191,11 @@ class VAE_Model(nn.Module):
             self.writer.add_scalar('KL_Beta', self.kl_annealing.get_beta(), self.current_epoch)
             self.writer.add_scalar('Teacher_Forcing', self.tfr, self.current_epoch)
 
+            import math
+            if math.isnan(loss):
+                print("---NaN loss detected, stopping training!!!")
+                break
+
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}_BEST.ckpt"))
@@ -167,7 +204,10 @@ class VAE_Model(nn.Module):
                 self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}.ckpt"))
 
             self.current_epoch += 1
-            self.scheduler.step()
+            if isinstance(self.scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+                self.scheduler.step(val_loss)
+            else:
+                self.scheduler.step()
             self.teacher_forcing_ratio_update()
             self.kl_annealing.update()
             
@@ -385,7 +425,10 @@ if __name__ == '__main__':
     parser.add_argument('--kl_anneal_ratio',    type=float, default=1,              help="")
 
     # Log save root
-    parser.add_argument('--log_save_root',     type=str, default="./logs", help="The path to save your log file")
+    parser.add_argument('--log_save_root',      type=str, default="./logs", help="The path to save your log file")
+
+    # Optim & Scheduler setting
+    parser.add_argument('--scheduler',           type=str, choices=["MultiStepLR", "CosineAnnealingWarmRestarts", "ReduceLROnPlateau"], default="MultiStepLR")
     
 
     

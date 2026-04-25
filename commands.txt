@@ -1,4 +1,39 @@
-python src/Trainer.py --DR ./dataset --save_root ./checkpoints --fast_train
+# =========== For kl annealing compare ===========
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints \
+ --fast_train --num_epoch 50 \
+--kl_anneal_type Cyclical --kl_anneal_cycle 5 --kl_anneal_ratio 0.5
+
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints --fast_train \
+ --fast_train --num_epoch 50 \
+--kl_anneal_type Monotonic --kl_anneal_cycle 5 --kl_anneal_ratio 0.5
+
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints --fast_train \
+ --fast_train --num_epoch 50 \
+--kl_anneal_type without --kl_anneal_cycle 5 --kl_anneal_ratio 0.5
+
+
+# =========== For kaggle ===========
+# AdamW + MultiStepLR
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints04250504 \
+--num_epoch 100 --tfr 1.0 --tfr_sde 10 --tfr_d_step 0.05 \
+--kl_anneal_type Cyclical --kl_anneal_cycle 5 --kl_anneal_ratio 0.5 \
+--optim AdamW --scheduler MultiStepLR
+
+# Adam + CosineAnnealingWarmRestarts
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints04250504 \
+--num_epoch 100 --tfr 1.0 --tfr_sde 10 --tfr_d_step 0.05 \
+--kl_anneal_type Cyclical --kl_anneal_cycle 5 --kl_anneal_ratio 0.5 \
+--optim Adam --scheduler CosineAnnealingWarmRestarts
+
+# AdamW + ReduceLROnPlateau
+python src/Trainer.py --DR ./dataset --save_root ./checkpoints04250504 \
+--num_epoch 100 --tfr 1.0 --tfr_sde 10 --tfr_d_step 0.05 \
+--kl_anneal_type Cyclical --kl_anneal_cycle 5 --kl_anneal_ratio 0.5 \
+--optim AdamW --scheduler ReduceLROnPlateau
+
+
+# =========== Testing ===========
 python src/Tester.py --DR ./dataset --save_root ./results --ckpt_path ./checkpoints/epoch=69.ckpt
+
 tensorboard --logdir=./logs
 http://localhost:6006
