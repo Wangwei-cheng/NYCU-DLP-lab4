@@ -151,9 +151,9 @@ class VAE_Model(nn.Module):
         self.best_val_loss = float('inf')
         self.log_save_path = os.path.join(
             args.log_save_root, 
-            f"lr_{args.lr}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}\
-            _kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}\
-            _optim_{args.optim}"
+            f"lr_{args.lr}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}"\
+            f"_kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}"\
+            f"_optim_{args.optim}"
             )
         from torch.utils.tensorboard import SummaryWriter
         self.writer = SummaryWriter(log_dir=self.log_save_path)
@@ -354,7 +354,7 @@ class VAE_Model(nn.Module):
     def load_checkpoint(self):
         path = self.args.ckpt_path
         if path != None and os.path.exists(path):
-            checkpoint = torch.load(path)
+            checkpoint = torch.load(path, weights_only=False)
             self.load_state_dict(checkpoint['state_dict'], strict=True) 
             self.args.lr = checkpoint['lr']
             self.tfr = checkpoint['tfr']
