@@ -191,12 +191,11 @@ class VAE_Model(nn.Module):
             self.writer.add_scalar('KL_Beta', self.kl_annealing.get_beta(), self.current_epoch)
             self.writer.add_scalar('Teacher_Forcing', self.tfr, self.current_epoch)
 
-            import math
-            if math.isnan(loss):
-                print("---NaN loss detected, stopping training!!!")
-                break
-
-            if val_loss < self.best_val_loss:
+            if math.isnan(train_loss):
+                print(f"[Warning] NaN loss detected at epoch {self.current_epoch}")
+                self.load_checkpoint()
+            
+            if val_loss < self.best_val_loss and not math.isnan(val_loss):
                 self.best_val_loss = val_loss
                 self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}_BEST.ckpt"))
                 print(f"Best model updated at epoch {self.current_epoch} with val_loss {val_loss:.4f}")
@@ -341,25 +340,38 @@ class VAE_Model(nn.Module):
         
     def save(self, path):
         torch.save({
-            "state_dict": self.state_dict(),
-            "optimizer": self.state_dict(),  
-            "lr"        : self.scheduler.get_last_lr()[0],
+            "state_dict":   self.state_dict(),
+            "optimizer":    self.optim.state_dict(),  
+            "scheduler":    self.scheduler.state_dict(),
+            "lr"        :   self.scheduler.get_last_lr()[0],
             "tfr"       :   self.tfr,
-            "last_epoch": self.current_epoch
+            "last_epoch":   self.current_epoch,
+            "kl_annealing": self.kl_annealing.__dict__
         }, path)
+        self.args.ckpt_path = path
         print(f"save ckpt to {path}")
 
     def load_checkpoint(self):
-        if self.args.ckpt_path != None:
-            checkpoint = torch.load(self.args.ckpt_path)
+        path = self.args.ckpt_path
+        if path != None and os.path.exists(path):
+            checkpoint = torch.load(path)
             self.load_state_dict(checkpoint['state_dict'], strict=True) 
             self.args.lr = checkpoint['lr']
             self.tfr = checkpoint['tfr']
-            
-            self.optim      = optim.Adam(self.parameters(), lr=self.args.lr)
-            self.scheduler  = optim.lr_scheduler.MultiStepLR(self.optim, milestones=[2, 4], gamma=0.1)
-            self.kl_annealing = kl_annealing(self.args, current_epoch=checkpoint['last_epoch'])
             self.current_epoch = checkpoint['last_epoch']
+            
+            if 'optimizer' in checkpoint:
+                self.optim.load_state_dict(checkpoint['optimizer'])
+            if 'scheduler' in checkpoint:
+                self.scheduler.load_state_dict(checkpoint['scheduler'])
+            if 'kl_annealing' in checkpoint:
+                self.kl_annealing.__dict__.update(checkpoint['kl_annealing'])
+
+            # self.optim      = optim.Adam(self.parameters(), lr=self.args.lr)
+            # self.scheduler  = optim.lr_scheduler.MultiStepLR(self.optim, milestones=[2, 4], gamma=0.1)
+            # self.kl_annealing = kl_annealing(self.args, current_epoch=checkpoint['last_epoch'])
+            
+            print(f"[Reload ckpt] Successfully loaded checkpoint from {path}")
 
     def optimizer_step(self):
         nn.utils.clip_grad_norm_(self.parameters(), 1.)
