@@ -194,8 +194,7 @@ class VAE_Model(nn.Module):
             if math.isnan(train_loss):
                 print(f"[Warning] NaN loss detected at epoch {self.current_epoch}")
                 self.load_checkpoint()
-            
-            if val_loss < self.best_val_loss and not math.isnan(val_loss):
+            elif val_loss < self.best_val_loss and not math.isnan(val_loss):
                 self.best_val_loss = val_loss
                 self.save(os.path.join(self.args.save_root, f"epoch={self.current_epoch}_loss_{val_loss}_BEST.ckpt"))
                 print(f"Best model updated at epoch {self.current_epoch} with val_loss {val_loss:.4f}")
