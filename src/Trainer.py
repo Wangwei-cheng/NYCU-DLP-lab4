@@ -36,9 +36,6 @@ def kl_criterion(mu, logvar, batch_size):
 
 class kl_annealing():
     def __init__(self, args, current_epoch=0):
-        self.beta = 0
-        self.current_epoch = current_epoch
-
         if args.kl_anneal_type == "Cyclical":
             self.schedule = self.frange_cycle_linear(
                 n_iter=args.num_epoch, 
@@ -58,6 +55,9 @@ class kl_annealing():
                 )
         else:
             self.schedule = np.ones(args.num_epoch)
+
+        self.current_epoch = current_epoch
+        self.beta = self.schedule[self.current_epoch]
         
     def update(self):
         self.current_epoch += 1
