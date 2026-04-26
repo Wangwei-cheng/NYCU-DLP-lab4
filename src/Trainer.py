@@ -67,7 +67,7 @@ class kl_annealing():
             self.beta = self.schedule[-1]
     
     def get_beta(self):
-        return math.max(self.beta, 1e-5)
+        return max(self.beta, 1e-5)
 
     # 其他的annealing策略
     # https://github.com/haofuml/cyclical_annealing/blob/master/plot/plot_schedules.ipynb
