@@ -106,6 +106,7 @@ class Test_model(VAE_Model):
         df = pd.DataFrame(pred_to_int)
         df.insert(0, 'id', range(0, len(df)))
         df.to_csv(os.path.join(self.args.save_root, f'submission.csv'), header=True, index=False)
+        print(f"Predicted sequence has been saved in {os.path.join(self.args.save_root, f'submission.csv')}")
         
         
             
@@ -172,7 +173,7 @@ class Test_model(VAE_Model):
 
     def load_checkpoint(self):
         if self.args.ckpt_path != None:
-            checkpoint = torch.load(self.args.ckpt_path)
+            checkpoint = torch.load(self.args.ckpt_path, weights_only=False)
             self.load_state_dict(checkpoint['state_dict'], strict=True) 
 
 
