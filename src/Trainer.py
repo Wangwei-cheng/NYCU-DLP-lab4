@@ -129,8 +129,7 @@ class VAE_Model(nn.Module):
                 self.optim, 
                 mode='min', 
                 factor=0.65, 
-                patience=10, 
-                verbose=True
+                patience=10
                 )
         else:
             raise NotImplementedError(f"Scheduler {args.scheduler} is not implemented")
