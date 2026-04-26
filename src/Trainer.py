@@ -38,7 +38,7 @@ class kl_annealing():
     def __init__(self, args, current_epoch=0):
         if args.kl_anneal_type == "Cyclical":
             self.schedule = self.frange_cycle_linear(
-                n_iter=args.num_epoch, 
+                n_iter=args.num_epoch + 1, 
                 start=0.0, 
                 stop=1.0, 
                 n_cycle=args.kl_anneal_cycle, 
@@ -47,14 +47,14 @@ class kl_annealing():
         elif args.kl_anneal_type == "Monotonic":
             # spaciel case for Cyclical annealing with n_cycle = 1
             self.schedule = self.schedule = self.frange_cycle_linear(
-                n_iter=args.num_epoch,
+                n_iter=args.num_epoch + 1,
                 start=0.0,
                 stop=1.0,
                 n_cycle=1,
                 ratio=args.kl_anneal_ratio
                 )
         else:
-            self.schedule = np.ones(args.num_epoch)
+            self.schedule = np.ones(args.num_epoch + 1)
 
         self.current_epoch = current_epoch
         self.beta = self.schedule[self.current_epoch]
@@ -67,7 +67,7 @@ class kl_annealing():
             self.beta = self.schedule[-1]
     
     def get_beta(self):
-        return self.beta
+        return math.max(self.beta, 1e-5)
 
     # 其他的annealing策略
     # https://github.com/haofuml/cyclical_annealing/blob/master/plot/plot_schedules.ipynb
