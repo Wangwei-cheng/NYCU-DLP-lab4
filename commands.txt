@@ -54,3 +54,7 @@ python src/Tester.py --DR ./dataset --save_root ./results --ckpt_path ./checkpoi
 
 tensorboard --logdir=./logs
 http://localhost:6006
+
+
+# =========== PSNR plot ===========
+python src/plot_psnr.py --DR ./dataset --ckpt_path ./ckpt_best/epoch=104_loss_0.00020307260274421424_BEST.ckpt

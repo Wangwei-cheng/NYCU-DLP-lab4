@@ -22,8 +22,7 @@ class Generator(nn.Sequential):
             DepthConvBlock(input_nc//4, input_nc//4),
             ResidualBlock(input_nc//4, input_nc//8),
             DepthConvBlock(input_nc//8, input_nc//8),
-            nn.Conv2d(input_nc//8, 3, 1),
-            nn.Sigmoid()
+            nn.Conv2d(input_nc//8, 3, 1)
         )
         
     def forward(self, input):

@@ -163,12 +163,12 @@ class VAE_Model(nn.Module):
     def training_stage(self):
         for i in range(self.args.num_epoch):
             train_loader = self.train_dataloader()
-            adapt_TeacherForcing = True if random.random() < self.tfr else False
             train_loss_sum = 0.0
             
             for (img, label) in (pbar := tqdm(train_loader, ncols=120)):
                 img = img.to(self.args.device)
                 label = label.to(self.args.device)
+                adapt_TeacherForcing = True if random.random() < self.tfr else False
                 loss = self.training_one_step(img, label, adapt_TeacherForcing)
                 train_loss_sum += loss.item()
                 beta = self.kl_annealing.get_beta()
@@ -248,7 +248,8 @@ class VAE_Model(nn.Module):
             fusion = self.Decoder_Fusion(x_prev, p_in, z)
             pred_frame = self.Generator(fusion)
             
-            mse_loss += self.mse_criterion(pred_frame, curr_frame)
+            mse_sum = self.mse_criterion(pred_frame, curr_frame, reduction="sum")
+            mse_loss += mse_sum / self.batch_size
             kl_loss += kl_criterion(mu, logvar, self.batch_size)
 
             if adapt_TeacherForcing:
