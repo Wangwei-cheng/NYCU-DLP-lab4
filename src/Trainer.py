@@ -135,7 +135,7 @@ class VAE_Model(nn.Module):
             raise NotImplementedError(f"Scheduler {args.scheduler} is not implemented")
 
         self.kl_annealing = kl_annealing(args, current_epoch=0)
-        self.mse_criterion = nn.MSELoss()
+        self.mse_criterion = nn.MSELoss(reduction='sum')
         self.current_epoch = 0
         
         # Teacher forcing arguments
@@ -248,7 +248,7 @@ class VAE_Model(nn.Module):
             fusion = self.Decoder_Fusion(x_prev, p_in, z)
             pred_frame = self.Generator(fusion)
             
-            mse_sum = self.mse_criterion(pred_frame, curr_frame, reduction="sum")
+            mse_sum = self.mse_criterion(pred_frame, curr_frame)
             mse_loss += mse_sum / self.batch_size
             kl_loss += kl_criterion(mu, logvar, self.batch_size)
 
